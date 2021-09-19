@@ -1,0 +1,262 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# 0. packages
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(sf)
+```
+
+# 1. data
+
+```{r}
+rebuilt_list <- read_csv("rebuilt_list.csv", locale = locale(encoding = "EUC-KR"))
+rebuilt_phase <- read_csv("rebuilt_phase.csv", locale = locale(encoding = "EUC-KR"))
+rebuilt_GG <- read_csv("rebuilt_GG.csv", locale = locale(encoding = "EUC-KR"))
+```
+### (2) data census
+```{r}
+household2015 <- read_csv("household2015.csv", locale = locale(encoding = "EUC-KR"))
+panel2019_household <- read_csv("panel2019_household.csv", locale = locale(encoding = "EUC-KR"))
+# panel2019_pop <- read_csv("panel2019_pop.csv",
+#                           col_names = FALSE,
+#                           locale = locale(encoding = "EUC-KR"))
+```
+
+# 2. data prcs
+
+```{r}
+dt_rebuilt <- inner_join(rebuilt_phase, rebuilt_list)
+```
+
+```{r}
+colnames(dt_rebuilt)
+```
+
+```{r}
+colnames_rebuilt <-
+  c("no_id", "code", "nm_code", "code_phase", "nm_phase_1", "YYYYMMDD", "subject",
+    "contents", "sigungu", "dong", "code_poject", "code_busiown", "nm_busiown", "add_top",
+    "nm_phase", "state", "nm_project", "add", "area", "area_build", "nm_zone", 
+    "nm_dstr", "area_available", "area_road", "area_park", "area_green", "area_public",
+    "area_school", "area_etc", "main_prps", "rt_bld_cover", "rt_bld_floor", "height",
+    "num_floor_abv", "num_floor_undr", "amt_unit", "cnt_60unit", "cnt_60_85unit",
+    "cnt_85unit", "etc")
+
+colnames(dt_rebuilt) <- colnames_rebuilt
+```
+
+```{r}
+dt_rebuilt_eda <- 
+dt_rebuilt %>%
+  group_by(YYYYMMDD, nm_project, sigungu, code_poject) %>%
+  summarise(rt_bld_floor = mean(rt_bld_floor),
+            area = mean(area),
+            area_build = mean(area_build),
+            area_park = mean(area_park),
+            area_public = mean(area_public),
+            num_floor_abv = mean(num_floor_abv),
+            height = mean(height),
+            amt_unit = mean(amt_unit),
+            cnt_60unit = mean(cnt_60unit),
+            cnt_60_85unit = mean(cnt_60_85unit),
+            cnt_85unit = mean(cnt_85unit)) %>%
+  mutate(rt_park = area_park/area,
+         rt_public = area_public/area,
+         YYYYMMDD = ymd(YYYYMMDD))
+```
+
+```{r}
+seobuk <- c("은평구", "서대문구", "마포구")
+dosim <- c("종로구", "중구", "용산구")
+dongbuk <- c("노원구", "중랑구", "광진구", "성동구", "동대문구", "성북구", "강북구", "도봉구")
+seonam <- c("강서구", "양천구", "영등포구", "동작구", "관악구", "금천구", "구로구")
+dongnam <- c("서초구", "강남구", "송파구", "강동구")
+
+dt_rebuilt_eda <- within(dt_rebuilt_eda, {
+  nm_dstr = character(0)
+  nm_dstr[sigungu %in% seobuk] = "서북권"
+  nm_dstr[sigungu %in% dosim] = "도심권"
+  nm_dstr[sigungu %in% dongbuk] = "동북권"
+  nm_dstr[sigungu %in% seonam] = "서남권"
+  nm_dstr[sigungu %in% dongnam] = "동남권"
+})
+
+```
+
+```{r}
+riverview <- c("마포구", "용산구", "광진구", "성동구", "강서구", "양천구", "영등포구", "동작구",
+               "서초구", "강남구", "송파구", "강동구")
+
+nonriver <- c("은평구", "서대문구", "종로구", "중구","노원구", "중랑구", "동대문구", "성북구",
+              "강북구", "도봉구", "관악구", "금천구", "구로구")
+
+dt_rebuilt_eda <- within(dt_rebuilt_eda, {
+  riverview = character(0)
+  riverview[sigungu %in% riverview] = "한강권"
+  riverview[sigungu %in% nonriver] = "비한강권"
+})
+```
+
+### (2) census data
+```{r}
+household2015 <-
+  household2015 %>%
+  mutate(가구일련번호 = as.character(가구일련번호))
+```
+
+```{r}
+head(household2015)
+head(panel2019_household)
+```
+
+
+```{r}
+colnames(household2015)
+```
+
+
+```{r}
+dt_rebuilt_eda <- dt_rebuilt_eda %>%
+  group_by(nm_project) %>%
+  slice(1:1)
+```
+
+```{r}
+dt_rebuilt_seg <- 
+dt_rebuilt %>%
+  #mutate(YYYYMMDD = ymd(YYYYMMDD)) %>%
+  arrange(no_id, YYYYMMDD) %>%
+  group_by(nm_project) %>%
+  mutate(ymd_start = YYYYMMDD,
+         ymd_end   = lead(YYYYMMDD),
+         phase     = paste(nm_phase, ":", nm_phase_1)) %>%
+  mutate(ymd_end = ifelse(is.na(ymd_end), "20210831", ymd_end)) %>%
+  mutate(ymd_start = ymd(ymd_start),
+         ymd_end   = ymd(ymd_end)) %>%
+  select(nm_project, ymd_start, ymd_end, phase, sigungu, nm_phase_1)
+```
+
+# 3.  EDA
+
+#### project timeline
+```{r warning = FALSE, message = FALSE}
+theme_set(theme_grey(base_family='AppleGothic'))
+#showtext_auto()
+a <- c("동자동제도시환경정비4구역", "돈의문1구역도시환경정비사업조합")
+dt_rebuilt_seg %>%
+  subset(nm_project %in% a) %>%
+  ggplot(aes(x = ymd_start, xend = ymd_end,
+             y = nm_project, yend = nm_project,
+             color = nm_phase_1,
+             size = 8)) +
+  geom_segment() +
+  geom_text(aes(label = phase, angle = 45, size = 7.9,
+                family = 'AppleGothic'),
+            hjust = -0.3, vjust = 0) +
+  geom_point(color = "white", size = 1) +
+  theme(legend.position="none")
+```
+
+```{r}
+dt_rebuilt_eda %>% 
+   mean(rt_bld_floor, na.rm = TRUE)
+```
+
+
+#### 용적률
+```{r warning = FALSE, message = FALSE}
+mean_rt_bld_floor <- median(dt_rebuilt_eda$rt_bld_floor, na.rm = TRUE)
+
+dt_rebuilt_eda %>%
+  subset(rt_bld_floor < 1000) %>%
+  ggplot(aes(x = YYYYMMDD, y = rt_bld_floor, color = nm_dstr)) +
+  geom_point() +
+  geom_hline(yintercept = 300, color = "red") +
+  geom_hline(yintercept = mean_rt_bld_floor, color = "blue")
+
+```
+#### 공원 면적 비율
+```{r warning = FALSE, message = FALSE}
+dt_rebuilt_eda %>%
+  subset(rt_park < 0.5) %>%
+  ggplot(aes(x = YYYYMMDD, y = rt_park, color = nm_dstr)) +
+  geom_point()
+```
+#### 공공용지 면적 비율 
+```{r warning = FALSE, message = FALSE}
+dt_rebuilt_eda %>%
+  subset(rt_public < 0.3) %>%
+  ggplot(aes(x = YYYYMMDD, y = rt_public, color = nm_dstr)) +
+  geom_point()
+```
+#### 지상 층수 
+```{r warning = FALSE, message = FALSE}
+dt_rebuilt_eda %>%
+  subset(num_floor_abv < 70) %>%
+  ggplot(aes(x = YYYYMMDD, y = num_floor_abv, color = nm_dstr)) +
+  geom_point()
+```
++ 30층 이상 
+```{r warning = FALSE, message = FALSE}
+dt_rebuilt_eda %>%
+  subset(num_floor_abv < 70) %>%
+  subset(num_floor_abv > 30) %>%
+  ggplot(aes(x = YYYYMMDD, y = num_floor_abv, color = nm_dstr)) +
+  geom_point()
+```
+
+
+#### 총 세대 수
+```{r warning = FALSE, message = FALSE}
+dt_rebuilt_eda %>%
+  subset(amt_unit < 10000) %>%
+  ggplot(aes(x = YYYYMMDD, y = amt_unit, color = nm_dstr)) +
+  geom_point()
+```
+#### 85이상 유닛 비율
+```{r warning = FALSE, message = FALSE}
+dt_rebuilt_eda %>%
+  subset(cnt_85unit < 2000) %>%
+  mutate(rt_85 = cnt_85unit/amt_unit) %>%
+  ggplot(aes(x = YYYYMMDD, y = rt_85, color = nm_dstr)) +
+  geom_point()
+```
+#### 60~85 유닛 비율
+```{r warning = FALSE, message = FALSE}
+dt_rebuilt_eda %>%
+  subset(cnt_60_85unit < 2000) %>%
+  mutate(rt_6085 = cnt_60_85unit/amt_unit) %>%
+  ggplot(aes(x = YYYYMMDD, y = rt_6085, color = nm_dstr)) +
+  geom_point()
+```
+#### 60이하 유닛 비율 
+```{r warning = FALSE, message = FALSE}
+dt_rebuilt_eda %>%
+  subset(cnt_60unit < 2000) %>%
+  mutate(rt_60 = cnt_60unit/amt_unit) %>%
+  ggplot(aes(x = YYYYMMDD, y = rt_60, color = nm_dstr)) +
+  geom_point()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
