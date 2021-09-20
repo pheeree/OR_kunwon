@@ -14,15 +14,17 @@ library(sf)
 # 1. data
 
 ```{r}
-rebuilt_list <- read_csv("rebuilt_list.csv", locale = locale(encoding = "EUC-KR"))
-rebuilt_phase <- read_csv("rebuilt_phase.csv", locale = locale(encoding = "EUC-KR"))
-rebuilt_GG <- read_csv("rebuilt_GG.csv", locale = locale(encoding = "EUC-KR"))
+rebuilt_list <- read_csv("./data/rebuilt_list.csv", locale = locale(encoding = "EUC-KR"))
+rebuilt_phase <- read_csv("./data/rebuilt_phase.csv", locale = locale(encoding = "EUC-KR"))
+rebuilt_GG <- read_csv("./data/rebuilt_GG.csv", locale = locale(encoding = "EUC-KR"))
 ```
 ### (2) data census
 ```{r}
-household2015 <- read_csv("household2015.csv", locale = locale(encoding = "EUC-KR"))
-panel2019_household <- read_csv("panel2019_household.csv", locale = locale(encoding = "EUC-KR"))
-# panel2019_pop <- read_csv("panel2019_pop.csv",
+household2015 <- read_csv("./data/household2015.csv"
+                          , locale = locale(encoding = "EUC-KR"))
+panel2019_household <- read_csv("./data/panel2019_household.csv"
+                                , locale = locale(encoding = "EUC-KR"))
+# panel2019_pop <- read_csv("./data/panel2019_pop.csv",
 #                           col_names = FALSE,
 #                           locale = locale(encoding = "EUC-KR"))
 ```
